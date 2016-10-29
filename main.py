@@ -13,14 +13,17 @@ def main():
 
 
 	l = LoadData()
-	fr = l.get_user_friends(62936719)
-	print(fr)
-	for i in fr[0:1]:
+	all_friends = l.get_user_friends(62936719)
+	# print(fr)
+
+	for i in all_friends[21:]:
 		res_log.info(i)
-		a = UserAnalyzer()
-		a.userGraph(i)
-		a.graphClasterization()
-		a.classifyByUniversity()
+		try:
+			a = UserAnalyzer()
+			a.userGraph(i)
+			a.classifyByUniversity()
+		except:
+			res_log.info('error')
 
 	# a.fromFile('graph.b', 'friends.b')
 

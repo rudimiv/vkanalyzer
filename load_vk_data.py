@@ -61,9 +61,20 @@ class UserAnalyzer:
 		self._log = logging.getLogger('res')
 
 	def userGraph(self, user_id):
+		self._log.debug('create user {0:d} graph'.format(user_id))
 		self._social_graph = NX.Graph()
 
 		self._user_friends_id = self._source_data.get_user_friends(user_id=user_id)
+
+		data = self._source_data.get_all_user_info(user_id=user_id)
+
+		self._user_first_name = data['first_name']
+		self._user_last_name = data['last_name']
+
+		self._log.debug('{0:s} {1:s}'.format(self._user_first_name, self._user_last_name))
+		if not len(self._user_friends_id):
+			raise ValueError
+
 		node_id = {}
 
 		for k, i in enumerate(self._user_friends_id):
@@ -83,13 +94,15 @@ class UserAnalyzer:
 
 		# self._friends_info = {x: self._source_data.get_all_user_info(x) for x in user_friends}
 		self._friends_info = {}
+		ten_procent = int(len(self._user_friends_id) / 10)
 
 		for i, x in enumerate(self._user_friends_id):
-			if i % 10 == 0:
-				self._log.debug('load {0:d}'.format(i))
+			if i % ten_procent == 0:
+				self._log.debug('load {0:d}'.format(int(i / ten_procent) * 10))
 				# print(i)
 			self._friends_info.update({i: self._source_data.get_all_user_info(x)})
 
+		self._log.debug('load finished')
 		"""for x in self._friends_info.keys():
 			print(x, self._friends_info[x])"""
 		# NX.draw(self._social_graph, node_size=30, with_labels=True)
@@ -128,7 +141,7 @@ class UserAnalyzer:
 		return counter / len(p), [(i, universities[i] / counter) for i in universities.keys()]
 
 	def classifyByUniversity(self):
-
+		self._log.debug('classify by university')
 		friends_univers = {}
 		univerities = {}
 
@@ -165,7 +178,8 @@ class UserAnalyzer:
 
 		res = max(s, key=lambda a: a[1])
 		print('res', res, univerities[res[0]])
-		self._log.info('name: {0:s} max_p: {1:f} university: {2:s}'.format(max_p, univerities[res[0]]))
+		self._log.info('{name:s} res: {res:s} university: {university:s}'.format(name='{0:s} {1:s}'.format(self._user_first_name, self._user_last_name),
+																				 res=str(res), university=univerities[res[0]]))
 		# print(list_of_universites)
 		# print(len(friends_univers))
 		# print(len(list_of_universites))
@@ -177,10 +191,8 @@ class UserAnalyzer:
 		# plt.show()
 
 	def graphClasterization(self):
-		# print(NX.to_edgelist(self._social_graph))
+		self._log.debug('clusterize graph')
 
-		# print(list(zip(*list(zip(*NX.to_edgelist(self._social_graph)))[:2])))
-		# a = zip(*NX.to_edgelist(self._social_graph))
 		g = igraph.Graph(len(self._social_graph), list(zip(*list(zip(*NX.to_edgelist(self._social_graph)))[:2])))
 
 		# print(g)
@@ -189,8 +201,6 @@ class UserAnalyzer:
 		res = g.community_walktrap()
 
 		clusters = res.as_clustering()
-		# print(clusters[0])
-		# print(clusters)
 		n_color = []
 		k = 0
 		for i in g.vs:
@@ -210,19 +220,10 @@ class UserAnalyzer:
 				if 'cluster' not in self._friends_info[j].keys():
 					self._friends_info[j].update({'cluster': [k]})
 				else:
-					# print('yes')
 					self._friends_info[j]['cluster'].append(k)
 				k = k + 1
 
-		# print(self._user_friends_id)
-		# print(self._friends_info.keys())
-
-		# for i in self._user_friends_id:
-		# 	print(self._friends_info[i]['cluster'])
-		# print(res)
-
 		self._clust = sorted(clusters, reverse=True, key=lambda x: len(x))
-		# print(self._clust)
 
 		return len(clusters)
 		pass
