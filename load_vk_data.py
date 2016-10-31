@@ -4,6 +4,7 @@ import networkx as NX
 import igraph
 import pickle
 import logging
+import numpy as np
 
 class LoadData:
 	def __init__(self, app=None, login=None, password=None):
@@ -14,7 +15,16 @@ class LoadData:
 		self._api = vk.API(self._session)
 		# print(self._api.users.get(user_ids=62936719))
 
+
 	def get_all_user_info(self, user_id):
+		'''
+		Получает информацию о пользователе по его id
+
+		:param user_id: id пользователся
+		:type integer
+		:return: информация о пользователе
+		:rtype dict
+		'''
 		counter = 0
 		while counter < 5:
 			try:
@@ -28,7 +38,16 @@ class LoadData:
 
 		res.update({'id': user_id})
 		return res
+
 	def get_user_friends(self, user_id):
+		'''
+		Возвращает список друзей пользователя по его id
+
+		:param user_id: id пользователя
+		:type integer
+		:return: список друзей
+		:rtype list
+		'''
 		counter = 0
 		while counter < 5:
 			try:
@@ -42,15 +61,20 @@ class LoadData:
 		return res
 
 	def get_user_friends_info(self, user_id):
+		'''
+		Возващает информацию обо всех друзьях пользователя
+
+		:param user_id: id пользователя
+		:type integer
+		:return: словарь с информацией о друзьях
+		:rtype dict
+		'''
 		friend_ids = self.get_user_friends(user_id)
 		friends_info = {}
 		for i, x in enumerate(friend_ids):
 			if i % 10 == 0:
 				print('load {0:d}'.format(i))
 
-			# if i > 20:
-			# 	break
-			usr_friends = self.get_user_friends(user_id=x)
 			friends_info.update({x: self.get_all_user_info(user_id=x)})
 
 		return friends_info
@@ -61,7 +85,14 @@ class UserAnalyzer:
 		self._log = logging.getLogger('res')
 
 	def userGraph(self, user_id):
-		self._log.debug('create user {0:d} graph'.format(user_id))
+		'''
+		Построение социального графа пользователя
+
+		:param user_id: id пользователя
+		:type integer
+		'''
+
+		self._log.debug('creating user {0:d} graph'.format(user_id))
 		self._social_graph = NX.Graph()
 
 		self._user_friends_id = self._source_data.get_user_friends(user_id=user_id)
@@ -71,7 +102,7 @@ class UserAnalyzer:
 		self._user_first_name = data['first_name']
 		self._user_last_name = data['last_name']
 
-		self._log.debug('{0:s} {1:s}'.format(self._user_first_name, self._user_last_name))
+		self._log.info('{0:s} {1:s}'.format(self._user_first_name, self._user_last_name))
 		if not len(self._user_friends_id):
 			raise ValueError
 
@@ -89,10 +120,7 @@ class UserAnalyzer:
 					# print(node_id[j], k)
 					self._social_graph.add_edge(node_id[j], k)
 
-		# print(self._social_graph)
-		# NX.drawing.nx_agraph.write_dot(self._social_graph, 'graph.dot')
 
-		# self._friends_info = {x: self._source_data.get_all_user_info(x) for x in user_friends}
 		self._friends_info = {}
 		ten_procent = int(len(self._user_friends_id) / 10)
 
@@ -103,11 +131,8 @@ class UserAnalyzer:
 			self._friends_info.update({i: self._source_data.get_all_user_info(x)})
 
 		self._log.debug('load finished')
-		"""for x in self._friends_info.keys():
-			print(x, self._friends_info[x])"""
-		# NX.draw(self._social_graph, node_size=30, with_labels=True)
-		# plt.savefig('graph.png')
-		# plt.show()
+
+
 
 	def fromFile(self, graph_file, friends_file):
 		with open(graph_file, 'rb') as g:
@@ -125,6 +150,14 @@ class UserAnalyzer:
 
 
 	def _countUniversities(self, p):
+		'''
+		Анализирует ВУЗ подгруппы людей
+
+		:param p: список id людей
+		:type list
+		:return: доля людей с открытой информацией о ВУЗе, список кортежей ВУЗ, процент людей
+		:rtype float, [(integer, float)]
+		'''
 		universities = {}
 		counter = 0
 		for i in p:
@@ -141,6 +174,11 @@ class UserAnalyzer:
 		return counter / len(p), [(i, universities[i] / counter) for i in universities.keys()]
 
 	def classifyByUniversity(self):
+		'''
+		Производит классификацию пользователя по ВУЗу
+
+		:return:
+		'''
 		self._log.debug('classify by university')
 		friends_univers = {}
 		univerities = {}
@@ -149,11 +187,10 @@ class UserAnalyzer:
 			u = self._friends_info[i].get('university')
 
 			if u:
-				# print(self._friends_info[i])
 				friends_univers.update({i: self._friends_info[i]})
 				univerities.update({u: self._friends_info[i].get('university_name')})
 
-		clusters_number = self.graphClasterization()
+		self.graphClasterization()
 
 		labels = []
 		for i in self._clust:
@@ -165,33 +202,38 @@ class UserAnalyzer:
 					labels.append((s[0][0], s[0][1], s[0][1] * op_proc * len(i)))
 
 
-				# print(len(i), op_proc, s)
-
-
 		max_p = max(labels, key=lambda a: a[2])[2]
-
-		# print('max_p', max_p)
 
 		s = []
 		for i in labels:
 			s.append((i[0], i[1] * i[2] / max_p))
 
-		res = max(s, key=lambda a: a[1])
-		print('res', res, univerities[res[0]])
-		self._log.info('{name:s} res: {res:s} university: {university:s}'.format(name='{0:s} {1:s}'.format(self._user_first_name, self._user_last_name),
-																				 res=str(res), university=univerities[res[0]]))
-		# print(list_of_universites)
-		# print(len(friends_univers))
-		# print(len(list_of_universites))
-		"""for i in univerities.keys():
-			print(i, univerities[i])"""
+		res_arr = sorted(s, reverse=True, key=lambda a: a[1])
+		prev_univers = set()
+
+		for i, res in enumerate(res_arr):
+			if res[1] < 0.5:
+				break
+
+			if res[0] in prev_univers:
+				continue
+
+			self._log.info('коэффициент: {probability:f} ВУЗ: {university:s}'.format(probability=res[1],
+																						university=univerities[res[0]]))
+
+
+			prev_univers.update({res[0]})
+			if i > 3:
+				break
+
+
 	def draw(self):
 		NX.draw(self._social_graph, node_size=30, with_labels=False)
 		plt.savefig('graph.png')
 		# plt.show()
 
 	def graphClasterization(self):
-		self._log.debug('clusterize graph')
+		self._log.debug('clusterizing graph')
 
 		g = igraph.Graph(len(self._social_graph), list(zip(*list(zip(*NX.to_edgelist(self._social_graph)))[:2])))
 
@@ -228,5 +270,74 @@ class UserAnalyzer:
 		return len(clusters)
 		pass
 
-	def Age(self):
-		pass
+
+	def _countAge(self, p):
+		'''
+		Анализирует возрастную струкутру
+
+		:param p: список id людей
+		:type list
+		:return: доля людей с открытой информацикй о возрасте, среднее, дисперсия
+		:rtype float, float, float
+		'''
+		ages = []
+
+		for i in p:
+			u = self._friends_info[i].get('bdate')
+
+			if u and len(u.split('.')) == 3:
+				ages.append(2016 - int(u.split('.')[2]))
+
+
+		# отфильтровываем по выбросам
+		arr = np.array(ages)
+		self._log.debug(arr)
+
+		new_arr = np.empty(0, dtype=int)
+
+		while not np.array_equal(arr, new_arr) and len(arr):
+			new_arr = np.empty(0, dtype=int)
+			for k, i in enumerate(arr):
+				arr_without_elem = np.delete(arr, k)
+				aver = np.average(arr_without_elem)
+				variance = np.var(arr_without_elem)
+
+				if (abs(i - aver) < 3 * variance):
+					new_arr = np.append(new_arr, i)
+
+			arr = np.array(new_arr)
+
+
+		if not len(arr):
+			return None
+
+		if abs(np.var(new_arr)) < 0.000001:
+			return (len(arr), len(arr) / len(p), np.average(new_arr), 0.1)
+		return (len(arr), len(arr) / len(p), np.average(new_arr), np.var(new_arr))
+
+
+	def age(self):
+		'''
+		Классификация людей по возрастам
+		:return:
+		'''
+		self.graphClasterization()
+
+		stat_by_clusters = []
+
+		for i in self._clust:
+			if len(i) > 10:
+				stat_by_clusters.append(self._countAge(i))
+
+				self._log.debug('new cluster')
+
+		stat_by_clusters = list(filter(lambda a: True if a else False, stat_by_clusters))
+
+		self._log.debug(list(stat_by_clusters))
+
+		max_p = max(stat_by_clusters, key=lambda a: a[0])[0]
+		self._log.debug(max_p)
+
+		res = max(stat_by_clusters, key=lambda a: a[0] / max_p * a[1] / a[3])
+
+		self._log.info('Возраст: {age:f} коэффициент: {probability:f}'.format(age=res[2], probability=res[1]))
