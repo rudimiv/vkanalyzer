@@ -233,7 +233,7 @@ class UserAnalyzer:
 		# plt.show()
 
 	def graphClasterization(self):
-		self._log.debug('clusterizing graph')
+		self._log.debug('clusterizing	 graph')
 
 		g = igraph.Graph(len(self._social_graph), list(zip(*list(zip(*NX.to_edgelist(self._social_graph)))[:2])))
 
