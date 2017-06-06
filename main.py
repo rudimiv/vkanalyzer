@@ -1,3 +1,6 @@
+#!/opt/local/bin/python3
+# -*- coding: utf-8 -*-
+
 from load_vk_data import UserAnalyzer
 from load_vk_data import LoadData
 import logging

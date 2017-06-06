@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import vk
 import matplotlib.pyplot as plt
 import networkx as NX
@@ -5,9 +7,11 @@ import igraph
 import pickle
 import logging
 import numpy as np
+from threading import Thread
 
 class LoadData:
 	def __init__(self, app=None, login=None, password=None):
+		self._log = logging.getLogger('res')
 		if login is not None and password is not None and app is not None:
 			self._session = vk.AuthSession(app_id=app, user_login=login, user_password=password)
 		else:
@@ -39,6 +43,10 @@ class LoadData:
 		res.update({'id': user_id})
 		return res
 
+	def get_all_users_info(self, users_id):
+		for i in users_id:
+			friends_info.update({x: self.get_all_user_info(user_id=x)})
+
 	def get_user_friends(self, user_id):
 		'''
 		Возвращает список друзей пользователя по его id
@@ -60,7 +68,8 @@ class LoadData:
 
 		return res
 
-	def get_user_friends_info(self, user_id):
+	def get_user_friends_info(self, user_id, number_of_threads=12):
+		print('here')
 		'''
 		Возващает информацию обо всех друзьях пользователя
 
@@ -71,12 +80,29 @@ class LoadData:
 		'''
 		friend_ids = self.get_user_friends(user_id)
 		friends_info = {}
-		for i, x in enumerate(friend_ids):
+		"""for i, x in enumerate(friend_ids):
 			if i % 10 == 0:
 				print('load {0:d}'.format(i))
 
-			friends_info.update({x: self.get_all_user_info(user_id=x)})
+			friends_info.update()"""
 
+		# разбиение между процессами
+		ids_to_process = len(friend_ids) // number_of_threads + 1
+		friend_ids_to_processes = [friend_ids[i: i + ids_to_process] for i in range(0, len(friend_ids), ids_to_process)]
+
+		threads = []
+
+		for k, i in enumerate(friend_ids_to_processes):
+			self._log.debug('Start {0:d} Thread'.format(k))
+			thread = Thread(target=get_all_users_info, args=(i,))
+			thread.start()
+			threads.append(thread)
+
+		# ждать окончания потока
+		for thread in threads:
+			thread.join()
+
+		self._log.debug('All threads are terminated')
 		return friends_info
 
 class UserAnalyzer:
@@ -84,7 +110,7 @@ class UserAnalyzer:
 		self._source_data = LoadData(app=app, login=login, password=password)
 		self._log = logging.getLogger('res')
 
-	def userGraph(self, user_id):
+	def userGraph(self, user_id, number_of_threads=12):
 		'''
 		Построение социального графа пользователя
 
@@ -106,32 +132,59 @@ class UserAnalyzer:
 		if not len(self._user_friends_id):
 			raise ValueError
 
-		node_id = {}
+		self._node_id = {}
 
 		for k, i in enumerate(self._user_friends_id):
 			self._social_graph.add_node(k)
-			node_id.update({i: k})
+			self._node_id.update({i: k})
 
-		for k, i in enumerate(self._user_friends_id):
+		# разбиение между процессами
+		ids_to_process = len(self._user_friends_id) // number_of_threads + 1
+		friend_ids_to_processes = [self._user_friends_id[i: i + ids_to_process] for i in range(0, len(self._user_friends_id), ids_to_process)]
+
+		threads = []
+
+		for k, i in enumerate(friend_ids_to_processes):
+			self._log.debug('Start {0:d} Thread'.format(k))
+			thread = Thread(target=self._add_friends_to_social_graph, args=(i, k * ids_to_process))
+			thread.start()
+			threads.append(thread)
+
+		# ждаем окончания потоков
+		for thread in threads:
+			thread.join()
+
+		self._log.debug('All threads are terminated')
+
+
+		self._friends_info = {}
+
+		threads = []
+
+		for k, i in enumerate(friend_ids_to_processes):
+			self._log.debug('Start {0:d} Thread'.format(k))
+			thread = Thread(target=self._get_friends_info, args=(i, k * ids_to_process))
+			thread.start()
+			threads.append(thread)
+
+		# ждаем окончания потоков
+		for thread in threads:
+			thread.join()
+
+		self._log.debug('All threads are terminated')
+
+	def _get_friends_info(self, friends_ids, nodes_num):
+		for k, i in enumerate(friends_ids):
+			self._friends_info.update({nodes_num + k: self._source_data.get_all_user_info(i)})
+
+	def _add_friends_to_social_graph(self, user_ids, nodes_num):
+		for k, i in enumerate(user_ids):
 			n = self._source_data.get_user_friends(user_id=i)
 
 			for j in n:
 				if j in self._user_friends_id:
 					# print(node_id[j], k)
-					self._social_graph.add_edge(node_id[j], k)
-
-
-		self._friends_info = {}
-		ten_procent = int(len(self._user_friends_id) / 10)
-
-		for i, x in enumerate(self._user_friends_id):
-			if i % ten_procent == 0:
-				self._log.debug('load {0:d}'.format(int(i / ten_procent) * 10))
-				# print(i)
-			self._friends_info.update({i: self._source_data.get_all_user_info(x)})
-
-		self._log.debug('load finished')
-
+					self._social_graph.add_edge(self._node_id[j], nodes_num + k)
 
 
 	def fromFile(self, graph_file, friends_file):
@@ -218,7 +271,7 @@ class UserAnalyzer:
 			if res[0] in prev_univers:
 				continue
 
-			self._log.info('коэффициент: {probability:f} ВУЗ: {university:s}'.format(probability=res[1],
+			self._log.info('ВУЗ: {university:s} коэффициент: {probability:f}'.format(probability=res[1],
 																						university=univerities[res[0]]))
 
 
